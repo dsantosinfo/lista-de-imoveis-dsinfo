@@ -1,0 +1,37 @@
+# Arquivos de Sistema Operacional e Editores de Código
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Dependências de Pacotes (se você usar no futuro)
+node_modules/
+vendor/
+
+# Arquivos de Log e Build do WordPress
+debug.log
+*.log
+*.zip
+*.tar.gz
+
+# Arquivos de configuração do WordPress
+# NUNCA versione o wp-config.php se ele estiver na mesma pasta
+wp-config.php
+
+# Ignora o núcleo do WordPress se o repositório estiver na raiz do site
+# Descomente as linhas abaixo se o seu repositório Git for a raiz da instalação do WordPress
+# /wp-admin/
+# /wp-includes/
+# /wp-*.php
+# /index.php
+# /xmlrpc.php
+
+# Ignora o conteúdo de wp-content, exceto a pasta de plugins
+/wp-content/*
+!/wp-content/plugins/
+
+# Dentro da pasta de plugins, ignora todos os outros plugins, exceto o nosso
+/wp-content/plugins/*
+!/wp-content/plugins/lista-de-imoveis/
