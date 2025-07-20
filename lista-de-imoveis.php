@@ -66,6 +66,7 @@ final class Lista_Imoveis {
         new LI_Admin();
         new LI_Public();
         new LI_Elementor();
+        new LI_Api();
         
         
         // Hooks de ativação/desativação

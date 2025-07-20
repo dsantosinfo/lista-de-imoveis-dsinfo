@@ -8,153 +8,115 @@ if (!defined('ABSPATH')) {
 
 class LI_Api {
 
-    protected $namespace = 'lista-imoveis/v1';
-
     public function __construct() {
-        add_action('rest_api_init', [$this, 'register_routes']);
+        // Mantenha este hook para registrar os campos customizados na API padrão.
+        // Garante que o método 'register_custom_fields_to_api' é chamado no momento certo.
+        add_action('rest_api_init', [$this, 'register_custom_fields_to_api']);
     }
 
-    /**
-     * Registra todas as rotas da API.
-     */
-    public function register_routes() {
-        // Rota para LER um único imóvel
-        register_rest_route($this->namespace, '/imovel/(?P<id>\d+)', [
-            'methods'  => WP_REST_Server::READABLE, // GET
-            'callback' => [$this, 'get_imovel'],
-            'permission_callback' => [$this, 'permissions_check'],
-        ]);
-
-        // Rota para CRIAR um imóvel
-        register_rest_route($this->namespace, '/imovel', [
-            'methods'  => WP_REST_Server::CREATABLE, // POST
-            'callback' => [$this, 'create_imovel'],
-            'permission_callback' => [$this, 'permissions_check'],
-        ]);
-
-        // Rota para ATUALIZAR um imóvel
-        register_rest_route($this->namespace, '/imovel/(?P<id>\d+)', [
-            'methods'  => WP_REST_Server::EDITABLE, // POST, PUT, PATCH
-            'callback' => [$this, 'update_imovel'],
-            'permission_callback' => [$this, 'permissions_check'],
-        ]);
-
-        // Rota para DELETAR um imóvel
-        register_rest_route($this->namespace, '/imovel/(?P<id>\d+)', [
-            'methods'  => WP_REST_Server::DELETABLE, // DELETE
-            'callback' => [$this, 'delete_imovel'],
-            'permission_callback' => [$this, 'permissions_check'],
-        ]);
-    }
-
-    /**
-     * Verificação de permissão para todas as rotas.
-     * Permite acesso apenas a usuários que podem editar posts.
-     */
-    public function permissions_check() {
-        return current_user_can('edit_posts');
-    }
-
-    /**
-     * Callback para buscar um único imóvel.
-     */
-    public function get_imovel(WP_REST_Request $request) {
-        $id = (int) $request['id'];
-        $post = get_post($id);
-
-        if (empty($post) || $post->post_type !== 'imovel') {
-            return new WP_Error('rest_post_not_found', 'Imóvel não encontrado.', ['status' => 404]);
-        }
-
-        return new WP_REST_Response($this->prepare_imovel_for_response($post), 200);
-    }
-
-    /**
-     * Callback para criar um imóvel.
-     */
-    public function create_imovel(WP_REST_Request $request) {
-        $params = $request->get_params();
-        $post_args = [
-            'post_type'    => 'imovel',
-            'post_status'  => 'publish',
-            'post_title'   => sanitize_text_field($params['titulo'] ?? 'Novo Imóvel'),
-            'post_content' => sanitize_textarea_field($params['descricao'] ?? ''),
-        ];
-
-        $post_id = wp_insert_post($post_args, true);
-        if (is_wp_error($post_id)) {
-            return $post_id;
-        }
-
-        $this->update_imovel_meta($post_id, $params);
-        return new WP_REST_Response(['id' => $post_id, 'message' => 'Imóvel criado com sucesso.'], 201);
-    }
-
-    /**
-     * Callback para atualizar um imóvel.
-     */
-    public function update_imovel(WP_REST_Request $request) {
-        $id = (int) $request['id'];
-        $post = get_post($id);
-        if (empty($post) || $post->post_type !== 'imovel') {
-            return new WP_Error('rest_post_not_found', 'Imóvel não encontrado.', ['status' => 404]);
-        }
-
-        $params = $request->get_params();
-        $post_args = [
-            'ID' => $id,
-        ];
-        if (isset($params['titulo'])) $post_args['post_title'] = sanitize_text_field($params['titulo']);
-        if (isset($params['descricao'])) $post_args['post_content'] = sanitize_textarea_field($params['descricao']);
-
-        wp_update_post($post_args, true);
-        $this->update_imovel_meta($id, $params);
-
-        return new WP_REST_Response(['id' => $id, 'message' => 'Imóvel atualizado com sucesso.'], 200);
-    }
-
-    /**
-     * Callback para deletar um imóvel.
-     */
-    public function delete_imovel(WP_REST_Request $request) {
-        $id = (int) $request['id'];
-        $result = wp_delete_post($id, true); // Força a exclusão
-
-        if (!$result) {
-            return new WP_Error('rest_cannot_delete', 'Não foi possível deletar o imóvel.', ['status' => 500]);
-        }
-        return new WP_REST_Response(['message' => 'Imóvel deletado com sucesso.'], 200);
-    }
-    
     /**
      * Helper para atualizar os metadados a partir dos parâmetros da requisição.
+     * Esta função é o 'update_callback' para os campos customizados
+     * registrados no endpoint padrão do WP (/wp/v2/imovel/).
+     *
+     * @param mixed       $value      O valor do campo recebido da requisição REST.
+     * @param WP_Post     $post       O objeto WP_Post (o post que está sendo criado/atualizado).
+     * @param string      $field_name O nome do campo (meta_key) que está sendo atualizado.
+     * @param WP_REST_Request $request    O objeto da requisição REST completa.
+     * @param string      $object_type O tipo de objeto ('post', 'user', etc.).
+     * @return bool True se a atualização foi bem-sucedida, false em caso de falha.
      */
-    private function update_imovel_meta($post_id, $params) {
-        $meta_fields = ['li_codigo_referencia', 'li_area_total', 'li_quartos', 'li_banheiros', 'li_vagas_garagem', 'li_valor_venda', 'li_valor_aluguel', 'li_rua', 'li_bairro', 'li_cidade', 'li_estado', 'li_cep'];
-        foreach($meta_fields as $field) {
-            if (isset($params[$field])) {
-                update_post_meta($post_id, $field, sanitize_text_field($params[$field]));
-            }
+    public function update_imovel_meta_callback($value, $post, $field_name, $request, $object_type) {
+        $post_id = $post->ID;
+
+        // Lógica para campos booleanos (li_possui_...)
+        if (strpos($field_name, 'li_possui_') === 0) {
+            update_post_meta($post_id, $field_name, (bool)$value ? '1' : '0');
+            return true;
         }
+
+        // Lógica para 'li_galeria_ids' (espera um array de IDs)
+        if ($field_name === 'li_galeria_ids') {
+            if (is_array($value)) {
+                $ids_sanitized = implode(',', array_map('intval', $value));
+            } elseif (is_string($value)) {
+                $ids_sanitized = implode(',', array_map('intval', explode(',', sanitize_text_field($value))));
+            } else {
+                $ids_sanitized = ''; // Valor inválido, salva vazio
+            }
+            update_post_meta($post_id, $field_name, $ids_sanitized);
+            return true;
+        }
+
+        // Para outros campos de texto/número
+        update_post_meta($post_id, $field_name, sanitize_text_field($value));
+        return true;
     }
 
     /**
-     * Helper para formatar os dados de um imóvel para a resposta da API.
+     * Registra os metadados customizados para exposição na API REST padrão.
+     * Isso fará com que os campos apareçam no endpoint /wp/v2/imovel/.
      */
-    private function prepare_imovel_for_response($post) {
-        $meta = get_post_meta($post->ID);
-        $data = [
-            'id' => $post->ID,
-            'titulo' => $post->post_title,
-            'descricao' => $post->post_content,
-            'link' => get_permalink($post->ID),
-            'imagem_destacada' => get_the_post_thumbnail_url($post->ID, 'full'),
-            'dados_customizados' => [],
+    public function register_custom_fields_to_api() {
+        $meta_fields_to_expose = [
+            'li_codigo_referencia', 'li_area_total', 'li_quartos', 'li_banheiros', 'li_vagas_garagem',
+            'li_valor_venda', 'li_valor_aluguel', 'li_rua', 'li_bairro', 'li_cidade', 'li_estado', 'li_cep',
+            'li_area_construida', 'li_ano_construcao', 'li_disponibilidade', 'li_estado_conservacao',
+            'li_piso', 'li_andares', 'li_galeria_ids',
+            'li_possui_elevador', 'li_possui_area_servico', 'li_possui_varanda', 'li_possui_jardim',
+            'li_possui_piscina', 'li_possui_churrasqueira', 'li_possui_sala_estar', 'li_possui_sala_jantar',
+            'li_possui_cozinha', 'li_possui_lavabo', 'li_possui_escritorio', 'li_possui_deposito',
+            'li_possui_area_lazer', 'li_possui_acesso_deficientes', 'li_possui_sistema_seguranca',
+            'li_possui_ar_condicionado', 'li_possui_mobilia'
         ];
-        $meta_fields = ['li_codigo_referencia', 'li_area_total', 'li_quartos', 'li_banheiros', 'li_vagas_garagem', 'li_valor_venda', 'li_valor_aluguel', 'li_rua', 'li_bairro', 'li_cidade', 'li_estado', 'li_cep'];
-        foreach($meta_fields as $field) {
-            $data['dados_customizados'][$field] = $meta[$field][0] ?? null;
+
+        foreach ($meta_fields_to_expose as $field_name) {
+            register_rest_field(
+                'imovel', // Post Type ao qual o campo pertence
+                $field_name,
+                [
+                    'get_callback'    => function($object) use ($field_name) { // Removi $request pois nem sempre é necessário e pode causar erro se não for injetado
+                        // $object é uma array associativa com os dados brutos do post.
+                        $value = get_post_meta($object['id'], $field_name, true);
+                        
+                        if (strpos($field_name, 'li_possui_') === 0) {
+                            return ($value === '1');
+                        }
+                        if ($field_name === 'li_galeria_ids') {
+                            return !empty($value) ? array_map('intval', explode(',', $value)) : [];
+                        }
+                        return $value;
+                    },
+                    'update_callback' => [$this, 'update_imovel_meta_callback'], 
+                    'schema'          => [
+                        'type'        => (strpos($field_name, 'li_possui_') === 0) ? 'boolean' : ( ($field_name === 'li_galeria_ids') ? 'array' : 'string' ),
+                        'description' => 'Campo customizado do imóvel: ' . str_replace(['li_', '_'], [' ', ' '], $field_name),
+                        'context'     => ['view', 'edit'],
+                        'arg_options' => [
+                            'sanitize_callback' => function($value, $request, $param) use ($field_name) {
+                                if (strpos($field_name, 'li_possui_') === 0) {
+                                    return (bool)$value;
+                                }
+                                if ($field_name === 'li_galeria_ids') {
+                                    if (is_array($value)) {
+                                        return array_map('intval', $value);
+                                    }
+                                    if (is_string($value)) {
+                                        return array_map('intval', explode(',', $value));
+                                    }
+                                    return [];
+                                }
+                                return sanitize_text_field($value);
+                            },
+                            'validate_callback' => function($value, $request, $param) use ($field_name) {
+                                if ( (strpos($field_name, 'li_possui_') === 0) && !is_bool($value) && !is_numeric($value) ) return new WP_Error('rest_invalid_param', sprintf('"%s" deve ser um booleano ou 0/1.', $field_name), ['status' => 400]);
+                                if ( ($field_name === 'li_galeria_ids') && !is_array($value) && !is_string($value) ) return new WP_Error('rest_invalid_param', sprintf('"%s" deve ser um array de IDs ou string separada por vírgulas.', $field_name), ['status' => 400]);
+                                return true;
+                            },
+                        ],
+                    ],
+                ]
+            );
         }
-        return $data;
     }
 }
