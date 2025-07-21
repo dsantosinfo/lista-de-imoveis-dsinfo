@@ -9,9 +9,10 @@ if (!defined('ABSPATH')) {
 class LI_Api {
 
     public function __construct() {
-        // Mantenha este hook para registrar os campos customizados na API padrão.
-        // Garante que o método 'register_custom_fields_to_api' é chamado no momento certo.
+        // Este hook registra os campos customizados para o CPT 'imovel' na API REST padrão.
         add_action('rest_api_init', [$this, 'register_custom_fields_to_api']);
+        // Os endpoints personalizados para 'finalidade' foram removidos,
+        // pois o WordPress já oferece rotas padrão para taxonomias com 'show_in_rest' ativado.
     }
 
     /**
@@ -75,10 +76,9 @@ class LI_Api {
                 'imovel', // Post Type ao qual o campo pertence
                 $field_name,
                 [
-                    'get_callback'    => function($object) use ($field_name) { // Removi $request pois nem sempre é necessário e pode causar erro se não for injetado
-                        // $object é uma array associativa com os dados brutos do post.
+                    'get_callback'    => function($object) use ($field_name) {
                         $value = get_post_meta($object['id'], $field_name, true);
-                        
+
                         if (strpos($field_name, 'li_possui_') === 0) {
                             return ($value === '1');
                         }
@@ -87,7 +87,7 @@ class LI_Api {
                         }
                         return $value;
                     },
-                    'update_callback' => [$this, 'update_imovel_meta_callback'], 
+                    'update_callback' => [$this, 'update_imovel_meta_callback'],
                     'schema'          => [
                         'type'        => (strpos($field_name, 'li_possui_') === 0) ? 'boolean' : ( ($field_name === 'li_galeria_ids') ? 'array' : 'string' ),
                         'description' => 'Campo customizado do imóvel: ' . str_replace(['li_', '_'], [' ', ' '], $field_name),
