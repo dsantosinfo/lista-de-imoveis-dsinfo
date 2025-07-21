@@ -32,6 +32,7 @@ class LI_Api {
 
         // Lógica para campos booleanos (li_possui_...)
         if (strpos($field_name, 'li_possui_') === 0) {
+            // Garante que 'true' ou 'false' (booleanos do JSON) sejam salvos como '1' ou '0'.
             update_post_meta($post_id, $field_name, (bool)$value ? '1' : '0');
             return true;
         }
@@ -41,6 +42,7 @@ class LI_Api {
             if (is_array($value)) {
                 $ids_sanitized = implode(',', array_map('intval', $value));
             } elseif (is_string($value)) {
+                // Permite string de IDs separadas por vírgula também
                 $ids_sanitized = implode(',', array_map('intval', explode(',', sanitize_text_field($value))));
             } else {
                 $ids_sanitized = ''; // Valor inválido, salva vazio
@@ -49,7 +51,22 @@ class LI_Api {
             return true;
         }
 
-        // Para outros campos de texto/número
+        // Lógica para campos monetários (garante que null/vazio/string inválida vire 0.00)
+        if (in_array($field_name, ['li_valor_venda', 'li_valor_aluguel'])) {
+            // Converte para float, lida com vírgulas e pontos para formatação BR
+            $valor_float = 0.0;
+            if (is_numeric($value)) {
+                $valor_float = floatval($value);
+            } elseif (is_string($value) && !empty($value)) {
+                $valor_limpo = str_replace('.', '', $value); // Remove pontos de milhar
+                $valor_formatado = str_replace(',', '.', $valor_limpo); // Troca vírgula por ponto decimal
+                $valor_float = floatval($valor_formatado);
+            }
+            update_post_meta($post_id, $field_name, $valor_float);
+            return true;
+        }
+
+        // Para outros campos de texto/número genéricos
         update_post_meta($post_id, $field_name, sanitize_text_field($value));
         return true;
     }
@@ -72,6 +89,29 @@ class LI_Api {
         ];
 
         foreach ($meta_fields_to_expose as $field_name) {
+            // Inicializa as variáveis para cada iteração do loop
+            $schema_type = 'string';
+            $description = 'Campo customizado do imóvel: ' . str_replace(['li_', '_'], [' ', ' '], $field_name);
+            $validate_callback = null;
+
+            if (strpos($field_name, 'li_possui_') === 0) {
+                $schema_type = 'boolean';
+                $validate_callback = function($value) {
+                    return is_bool($value) || is_numeric($value);
+                };
+            } elseif ($field_name === 'li_galeria_ids') {
+                $schema_type = 'array';
+                $validate_callback = function($value) {
+                    return is_array($value) || is_string($value);
+                };
+            } elseif (in_array($field_name, ['li_valor_venda', 'li_valor_aluguel', 'li_area_total', 'li_area_construida', 'li_quartos', 'li_banheiros', 'li_vagas_garagem', 'li_ano_construcao', 'li_andares'])) {
+                // Definir campos numéricos com tipo 'number' ou 'integer'
+                $schema_type = (strpos($field_name, 'area') !== false || strpos($field_name, 'valor') !== false) ? 'number' : 'integer';
+                $validate_callback = function($value) {
+                    return is_numeric($value) || is_null($value) || (is_string($value) && empty($value));
+                };
+            }
+
             register_rest_field(
                 'imovel', // Post Type ao qual o campo pertence
                 $field_name,
@@ -85,15 +125,19 @@ class LI_Api {
                         if ($field_name === 'li_galeria_ids') {
                             return !empty($value) ? array_map('intval', explode(',', $value)) : [];
                         }
+                        // Para campos numéricos, retorna float/int ou null se vazio
+                        if (in_array($field_name, ['li_valor_venda', 'li_valor_aluguel', 'li_area_total', 'li_area_construida', 'li_quartos', 'li_banheiros', 'li_vagas_garagem', 'li_ano_construcao', 'li_andares'])) {
+                            return is_numeric($value) ? ($schema_type === 'integer' ? intval($value) : floatval($value)) : null;
+                        }
                         return $value;
                     },
                     'update_callback' => [$this, 'update_imovel_meta_callback'],
                     'schema'          => [
-                        'type'        => (strpos($field_name, 'li_possui_') === 0) ? 'boolean' : ( ($field_name === 'li_galeria_ids') ? 'array' : 'string' ),
-                        'description' => 'Campo customizado do imóvel: ' . str_replace(['li_', '_'], [' ', ' '], $field_name),
+                        'type'        => $schema_type,
+                        'description' => $description,
                         'context'     => ['view', 'edit'],
                         'arg_options' => [
-                            'sanitize_callback' => function($value, $request, $param) use ($field_name) {
+                            'sanitize_callback' => function($value) use ($field_name) {
                                 if (strpos($field_name, 'li_possui_') === 0) {
                                     return (bool)$value;
                                 }
@@ -102,15 +146,30 @@ class LI_Api {
                                         return array_map('intval', $value);
                                     }
                                     if (is_string($value)) {
-                                        return array_map('intval', explode(',', $value));
+                                        return array_map('intval', array_filter(explode(',', $value))); // Filter to remove empty string if split from ""
                                     }
                                     return [];
                                 }
+                                // Sanitiza campos numéricos
+                                if (in_array($field_name, ['li_valor_venda', 'li_valor_aluguel', 'li_area_total', 'li_area_construida', 'li_quartos', 'li_banheiros', 'li_vagas_garagem', 'li_ano_construcao', 'li_andares'])) {
+                                    if (is_numeric($value)) return $value;
+                                    if (is_string($value) && empty($value)) return null; // Salva null se vazio
+                                    // Converte formato BR (1.000,00 -> 1000.00) se for string
+                                    if (is_string($value)) {
+                                        $value = str_replace('.', '', $value); // Remove pontos de milhar
+                                        $value = str_replace(',', '.', $value); // Troca vírgula por ponto decimal
+                                        return is_numeric($value) ? $value : null;
+                                    }
+                                    return null;
+                                }
                                 return sanitize_text_field($value);
                             },
-                            'validate_callback' => function($value, $request, $param) use ($field_name) {
-                                if ( (strpos($field_name, 'li_possui_') === 0) && !is_bool($value) && !is_numeric($value) ) return new WP_Error('rest_invalid_param', sprintf('"%s" deve ser um booleano ou 0/1.', $field_name), ['status' => 400]);
-                                if ( ($field_name === 'li_galeria_ids') && !is_array($value) && !is_string($value) ) return new WP_Error('rest_invalid_param', sprintf('"%s" deve ser um array de IDs ou string separada por vírgulas.', $field_name), ['status' => 400]);
+                            'validate_callback' => function($value) use ($field_name, $validate_callback) {
+                                if ($validate_callback) {
+                                    return $validate_callback($value);
+                                }
+                                // Para campos que não têm um validate_callback específico,
+                                // garantimos que não seja passado um WP_Error
                                 return true;
                             },
                         ],

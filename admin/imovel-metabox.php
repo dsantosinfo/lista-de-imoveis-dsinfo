@@ -77,8 +77,8 @@ $google_api_key = get_option('li_Maps_api_key');
     <h3>Informações Principais</h3>
     <div class="li-metabox-grid">
         <div class="li-metabox-field"><label for="li_codigo_referencia">Código de Referência</label><input type="text" id="li_codigo_referencia" name="li_codigo_referencia" value="<?php echo esc_attr($values['li_codigo_referencia']); ?>"></div>
-        <div class="li-metabox-field"><label for="li_valor_venda">Valor de Venda (R$)</label><input type="text" id="li_valor_venda" name="li_valor_venda" value="<?php echo esc_attr($values['li_valor_venda']); ?>" placeholder="Ex: 1.500,00"></div>
-        <div class="li-metabox-field"><label for="li_valor_aluguel">Valor de Aluguel (R$)</label><input type="text" id="li_valor_aluguel" name="li_valor_aluguel" value="<?php echo esc_attr($values['li_valor_aluguel']); ?>" placeholder="Ex: 2.500,00"></div>
+        <div class="li-metabox-field"><label for="li_valor_venda">Valor de Venda (R$)</label><input type="text" id="li_valor_venda" name="li_valor_venda" value="<?php echo esc_attr(number_format(floatval($values['li_valor_venda']), 2, ',', '.')); ?>" placeholder="Ex: 1.500,00"></div>
+        <div class="li-metabox-field"><label for="li_valor_aluguel">Valor de Aluguel (R$)</label><input type="text" id="li_valor_aluguel" name="li_valor_aluguel" value="<?php echo esc_attr(number_format(floatval($values['li_valor_aluguel']), 2, ',', '.')); ?>" placeholder="Ex: 2.500,00"></div>
         <div class="li-metabox-field"><label for="li_area_total">Área Total (m²)</label><input type="number" id="li_area_total" name="li_area_total" value="<?php echo esc_attr($values['li_area_total']); ?>"></div>
         <div class="li-metabox-field"><label for="li_area_construida">Área Construída (m²)</label><input type="number" id="li_area_construida" name="li_area_construida" value="<?php echo esc_attr($values['li_area_construida']); ?>"></div>
         <div class="li-metabox-field"><label for="li_quartos">Quartos</label><input type="number" id="li_quartos" name="li_quartos" value="<?php echo esc_attr($values['li_quartos']); ?>"></div>
